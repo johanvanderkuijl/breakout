@@ -1,8 +1,9 @@
 $(document).ready(function(){
-  var x = 25;
-  var y = 250;
-  var dx = 1.5;
-  var dy = -4;
+  // our global vars
+  var x;
+  var y;
+  var dx;
+  var dy;
   var ctx;
   var WIDTH;
   var HEIGHT;
@@ -20,7 +21,21 @@ $(document).ready(function(){
   var BRICKWIDTH;
   var BRICKHEIGHT = 15;
   var PADDING = 1;
-
+  var iState = 0; // control state of game
+  // 0 - ready: just loaded, waiting for start
+  // 1 - playing
+  // 2 - succes: level cleared
+  // 3 - fail: dead
+  //
+  // transitions: 0 to 1, 1 to 2, 1 to 3, 2 to 0, 3 to 0
+  var ballr = 10;
+  var rowcolors = ["#FF1C0A", "#FFFD0A", "#00A308", "#0008DB", "#EB0093"];
+  var paddlecolor = "#FFFFFF";
+  var ballcolor = "#FFFFFF";
+  var backcolor = "#000000";
+  var textcolor = "#FFFFFF";
+  
+  
   // iphone controls
   var touchable = 'createTouch' in document;
 
@@ -29,14 +44,19 @@ $(document).ready(function(){
     canvas.addEventListener( 'touchmove', onTouchMove, false );
     canvas.addEventListener( 'touchend', onTouchEnd, false );
     $("#info").html('touch device detected');
-    dx = dx*2;
-    dy = dy*2;
+    //dx = dx*2; // double speed on iPhone
+    dy = dy*3;
   } else {
     $(document).mousemove(onMouseMove);
+    $(document).click(onClick);
     $("#info").html('mouse device detected');
   }
 
   function onTouchStart(e) {
+    if(iState==0 || iState==2 || iState==3) {
+      $("#info").html("touch");
+      levelStart();
+    }
     paddlex = e.touches[0].pageX - paddlew ;
   }
    
@@ -53,6 +73,9 @@ $(document).ready(function(){
     //do stuff
   }
 
+  /**
+   * initialize variables and start the drawing loop
+   */
   function init() {
     ctx = $('#canvas')[0].getContext("2d");
     WIDTH = $("#canvas").width();
@@ -61,8 +84,15 @@ $(document).ready(function(){
     BRICKWIDTH = (WIDTH/NCOLS) - 1;
     canvasMinX = $("#canvas").offset().left;
     canvasMaxX = canvasMinX + WIDTH;
-    intervalId = setInterval(draw, 10);
-    return intervalId;
+    
+
+      /*
+    if(iState==1) {
+      intervalId = setInterval(draw, 10);
+      return intervalId;
+    } else {
+      return 0;
+    }*/
   }
 
   function circle(x,y,r) {
@@ -104,8 +134,17 @@ $(document).ready(function(){
     }
   }
 
+  /* fires on mouseclick */
+  function onClick(evt) {
+    $("#info").html("click");
+    if(iState==0 || iState==2 || iState==3) {
+      levelStart();
+    }
+  }
 
-
+  /**
+   * initialize the bricks array in memory
+   */
   function initbricks() {
       bricks = new Array(NROWS);
       for (i=0; i < NROWS; i++) {
@@ -116,25 +155,96 @@ $(document).ready(function(){
       }
   }
 
+  function initball() {
+    x=25;
+    y=250;
+    dx = 1.5;
+    dy = -4;    
+  }
+  /**
+   * draw bricks on screen
+   * @return int iTotal the number of bricks left on the screen
+   */
   function drawbricks() {
+    iTotal = 0;
     for (i=0; i < NROWS; i++) {
       ctx.fillStyle = rowcolors[i];
       for (j=0; j < NCOLS; j++) {
         if (bricks[i][j] == 1) {
+          iTotal++;
           rect((j * (BRICKWIDTH + PADDING)) + PADDING, 
                (i * (BRICKHEIGHT + PADDING)) + PADDING,
                BRICKWIDTH, BRICKHEIGHT);
         }
       }
     }
+    return iTotal;
   }
 
-  var ballr = 10;
-  var rowcolors = ["#FF1C0A", "#FFFD0A", "#00A308", "#0008DB", "#EB0093"];
-  var paddlecolor = "#FFFFFF";
-  var ballcolor = "#FFFFFF";
-  var backcolor = "#000000";
 
+  
+  function levelReady() {
+    clear();
+    
+    var my_gradient = ctx.createLinearGradient(0, 0, 0, 150);
+    my_gradient.addColorStop(0, "black");
+    my_gradient.addColorStop(1, "#272066");
+    ctx.fillStyle = my_gradient;
+    ctx.fillRect(0, 0, 300, 300);
+    
+    ctx.fillStyle = ballcolor;
+    ctx.font = "bold 30px 'lucida grande'";
+    ctx.fillText("Click to play", 70, 100);
+  }
+  
+  /**
+   * player starts playing
+   */
+  function levelStart() {
+    iState=1;
+    initbricks();
+    initball();
+    intervalId = setInterval(draw, 10);
+    return intervalId;
+  }
+
+  /**
+   * player has cleared all blocks
+   */
+  function levelCleared() {
+    iState=2;
+    clearInterval(intervalId);
+    
+    //draw();
+    /*
+    var my_gradient = ctx.createLinearGradient(0, 0, 0, 150);
+    my_gradient.addColorStop(0, "black");
+    my_gradient.addColorStop(1, "#272066");
+    ctx.fillStyle = my_gradient;
+    ctx.fillRect(0, 0, 300, 300);
+    */
+    
+    draw();
+    ctx.fillStyle = textcolor;
+    ctx.font = "bold 30px 'lucida grande'";
+    ctx.fillText("Well done!", 70, 100);
+
+  }
+  
+  /**
+   * player died
+   */
+  function levelFailed() {
+    iState=3;
+    clearInterval(intervalId);
+    
+    ctx.fillStyle = textcolor;
+    ctx.font = "bold 30px 'lucida grande'";
+    ctx.fillText("Play again?", 70, 100);    
+  }
+  
+
+  
   function draw() {
     ctx.fillStyle = backcolor;
     clear();
@@ -146,8 +256,11 @@ $(document).ready(function(){
     ctx.fillStyle = paddlecolor;
     rect(paddlex, HEIGHT-paddleh, paddlew, paddleh);
 
-    drawbricks();
-
+    iTotal = drawbricks();
+    if(iState==1 && iTotal==0) {
+      levelCleared();
+    }
+    
     //want to learn about real collision detection? go read
     // http://www.metanetsoftware.com/technique/tutorialA.html
     rowheight = BRICKHEIGHT + PADDING;
@@ -158,6 +271,7 @@ $(document).ready(function(){
     if (y < NROWS * rowheight && row >= 0 && col >= 0 && bricks[row][col] == 1) {
       dy = -dy;
       bricks[row][col] = 0;
+      $("#info").html(iTotal); // update here
     }
 
     if (x + dx + ballr > WIDTH || x + dx - ballr < 0)
@@ -171,8 +285,9 @@ $(document).ready(function(){
         dx = 8 * ((x-(paddlex+paddlew/2))/paddlew);
         dy = -dy;
       }
-      else if (y + dy + ballr > HEIGHT)
-        clearInterval(intervalId);
+      else if (y + dy + ballr > HEIGHT) {
+        levelFailed();
+      }
     }
 
     x += dx;
@@ -181,4 +296,5 @@ $(document).ready(function(){
 
   init();
   initbricks();
+  levelReady();
 });
